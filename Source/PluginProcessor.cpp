@@ -267,7 +267,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FeedbackAudioProcessor::crea
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>("GAIN", "Gain", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("FEEDBACK", "Feedback", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterInt>("OFFSET", "Offset", 0, 36, 12));
+    params.push_back(std::make_unique<juce::AudioParameterInt>("OFFSET", "Offset", 0, 24, 12));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("TOLERANCE", "Tolerance", 0.0f, 1.0f, 0.5f));
 
     return { params.begin(), params.end() };
