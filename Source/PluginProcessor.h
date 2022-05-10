@@ -62,15 +62,18 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     // constants 
-    static constexpr auto fftOrder = 10;
+    static constexpr auto fftOrder = 13;          /* 12 creates enough detail without huge lag - 10 is safest */
     static constexpr auto fftSize = 1 << fftOrder;
     static constexpr auto lowestGuitarFreq = 75;
     static constexpr auto highestGuitarFreq = 1400;
-    static constexpr auto semitoneConstant = 1.05945454545;
+    static constexpr auto semitoneConstant = 1.05945;
 
 private:
     //==============================================================================
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
+
+    // ramp for feedback gain 
+    juce::LinearSmoothedValue<float> feedbackRamp{ 0.0f };
 
     // PRIVATE MEMBER VARIABLES FOR FFT
     juce::dsp::FFT forwardFFT;
@@ -79,21 +82,18 @@ private:
     std::array<float, fftSize * 2> fftData;
     int fifoIndex = 0;
 
-    //bool nextBlockReady = false; 
     double curSampleRate;
     float frequency;
+
+    float gain;
+    float previousGain;
 
     juce::Array<float> waveTable;
     double wtSize;
     double phase;
     double increment;
-    double amplitude;
-
+    float feedbackGain;
     bool playFeedback = false;
 
-    /*
-    juce::dsp::Oscillator<float> osc{ [](float x) { return std::sin(x); } };
-    juce::dsp::Gain<float> feedbackGain;
-    */
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FeedbackAudioProcessor)
 };

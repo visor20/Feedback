@@ -15,9 +15,9 @@ FeedbackAudioProcessor::FeedbackAudioProcessor()
      : AudioProcessor (BusesProperties()
                      #if ! JucePlugin_IsMidiEffect
                       #if ! JucePlugin_IsSynth
-                       .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
+                       .withInput  ("Input",  juce::AudioChannelSet::mono(), true)  // mono() vs. stero()
                       #endif
-                       .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+                       .withOutput ("Output", juce::AudioChannelSet::mono(), true)
                      #endif
                        ), apvts(*this, nullptr, "Parameters", createParameters()),
                           forwardFFT(fftOrder),
@@ -25,7 +25,6 @@ FeedbackAudioProcessor::FeedbackAudioProcessor()
                             
 #endif
 {
-    // put any constructors here
 }
 
 FeedbackAudioProcessor::~FeedbackAudioProcessor()
@@ -100,12 +99,14 @@ void FeedbackAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     // set initial values for waveTable
     curSampleRate = sampleRate;
     phase = 0;
-    amplitude = 0.5;
     wtSize = fftSize;
     for (int i = 0; i < wtSize; i++)
     {
         waveTable.insert(i, sin(2.0 * juce::double_Pi * i / wtSize));
     }
+
+    // feedback gain interpolation for avoiding pops and clicks
+    feedbackRamp.reset(curSampleRate, 0.005);
 }
 
 void FeedbackAudioProcessor::releaseResources()
@@ -145,29 +146,34 @@ void FeedbackAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
-    for (int channel = 0; channel < 1 /*totalNumInputChannels*/; ++channel)
+    if (totalNumInputChannels > 0)
     {
-        auto* channelData = buffer.getWritePointer (channel);
+        // get data for mono and feedbackGain (with interpolation)
+        auto* channelData = buffer.getWritePointer(0);
+        feedbackGain = apvts.getRawParameterValue("FEEDBACK")->load();
+        feedbackRamp.setTargetValue(feedbackGain);
 
         for (int sample = 0; sample < buffer.getNumSamples(); sample++)
         {
-            // FFT CODE - only channel 0
-            // if (channel == 0)
-            //{ 
             pushNextSampleIntoFifo(channelData[sample]);
-            // }
             
             if (playFeedback)
             {
                 increment = frequency * wtSize / curSampleRate;
-                channelData[sample] = waveTable[(int)phase] * amplitude;
+                channelData[sample] += waveTable[(int)phase] * feedbackRamp.getNextValue();
                 phase = fmod((phase + increment), wtSize);
             }
-
-            // g - temporary variable for the "Gain Out" slider value 
-            auto g = apvts.getRawParameterValue("GAIN")->load();
-            channelData[sample] *= g;
         }
+    }
+
+    // Gain ramp for main "gain out"
+    gain = apvts.getRawParameterValue("GAIN")->load();
+    if (gain == previousGain) {
+        buffer.applyGain(gain);
+    }
+    else {
+        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGain, gain);
+        previousGain = gain;
     }
 }
 
@@ -178,6 +184,7 @@ void FeedbackAudioProcessor::setFeedbackFlag()
     if (frequency < lowestGuitarFreq || frequency > highestGuitarFreq)
     {
         playFeedback = false;
+        phase = 0;
     }
     else {
         // get offset slider value and use the semitone constant to calculate offset; playFlag -> true
