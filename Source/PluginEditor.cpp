@@ -31,6 +31,7 @@ FeedbackAudioProcessorEditor::FeedbackAudioProcessorEditor (FeedbackAudioProcess
     mFeedbackGainSlider.setSliderStyle(juce::Slider::SliderStyle::LinearVertical);
     mFeedbackGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, true, 50, 25);
     addAndMakeVisible(mFeedbackGainSlider);
+    //mFeedbackGainSlider.setSkewFactor(0.02, false);
     feedbackGainSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, "FEEDBACK", mFeedbackGainSlider);
 
     // Feedback Gain Label
@@ -64,6 +65,18 @@ FeedbackAudioProcessorEditor::FeedbackAudioProcessorEditor (FeedbackAudioProcess
     mToleranceLabel.attachToComponent(&mToleranceSlider, false);
     mToleranceLabel.setJustificationType(juce::Justification::centred);
 
+    // Detune Slider 
+    mDetuneSlider.setSliderStyle(juce::Slider::SliderStyle::LinearVertical);
+    mDetuneSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, true, 50, 25);
+    addAndMakeVisible(mDetuneSlider);
+    detuneSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, "DETUNE", mDetuneSlider);
+
+    // Detune Label
+    addAndMakeVisible(mDetuneLabel);
+    mDetuneLabel.setText("Detune", juce::dontSendNotification);
+    mDetuneLabel.attachToComponent(&mDetuneSlider, false);
+    mDetuneLabel.setJustificationType(juce::Justification::centred);
+
     // color
     getLookAndFeel().setColour(juce::Slider::thumbColourId, juce::Colours::mediumvioletred);
     getLookAndFeel().setColour(juce::Slider::trackColourId, juce::Colours::purple);
@@ -85,7 +98,8 @@ void FeedbackAudioProcessorEditor::paint (juce::Graphics& g)
 void FeedbackAudioProcessorEditor::resized()
 {
     mGainSlider.setBounds(450, getHeight() / 2 - 75, 100, 150);
-    mFeedbackGainSlider.setBounds(325, getHeight() / 2 - 75, 100, 150);
+    mFeedbackGainSlider.setBounds(350, getHeight() / 2 - 75, 100, 150);
     mOffsetSlider.setBounds(50, getHeight() / 2 - 75, 100, 150);
-    mToleranceSlider.setBounds(200, getHeight() / 2 - 75, 100, 150);
+    mDetuneSlider.setBounds(150, getHeight() / 2 - 75, 100, 150);
+    mToleranceSlider.setBounds(250, getHeight() / 2 - 75, 100, 150);
 }

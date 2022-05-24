@@ -56,17 +56,18 @@ public:
 
     void pushNextSampleIntoFifo(float sample) noexcept;
     float getFundamentalFrequency();
-    void setFeedbackFlag();
+    void isSustain();
 
     // value tree for parameters 
     juce::AudioProcessorValueTreeState apvts;
 
     // constants 
-    static constexpr auto fftOrder = 13;          /* 12 creates enough detail without huge lag - 10 is safest */
+    static constexpr auto fftOrder = 12;          /* 12 creates enough detail without huge lag - 10 is safest */
     static constexpr auto fftSize = 1 << fftOrder;
     static constexpr auto lowestGuitarFreq = 75;
-    static constexpr auto highestGuitarFreq = 1400;
+    static constexpr auto highestGuitarFreq = 1200;
     static constexpr auto semitoneConstant = 1.05945;
+    static constexpr auto toleranceConstant = 250;
 
 private:
     //==============================================================================
@@ -74,6 +75,8 @@ private:
 
     // ramp for feedback gain 
     juce::LinearSmoothedValue<float> feedbackRamp{ 0.0f };
+    juce::LinearSmoothedValue<float> frequencyRamp{ 0.0f };
+    //juce::LinearSmoothedValue<float> detuneRamp{ 0.0f };
 
     // PRIVATE MEMBER VARIABLES FOR FFT
     juce::dsp::FFT forwardFFT;
@@ -84,6 +87,7 @@ private:
 
     double curSampleRate;
     float frequency;
+    float previousFrequency = 0;
 
     float gain;
     float previousGain;
@@ -93,7 +97,6 @@ private:
     double phase;
     double increment;
     float feedbackGain;
-    bool playFeedback = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FeedbackAudioProcessor)
 };

@@ -36,12 +36,15 @@ private:
     juce::Label mOffsetLabel;
     juce::Slider mToleranceSlider;
     juce::Label mToleranceLabel;
+    juce::Slider mDetuneSlider;
+    juce::Label mDetuneLabel;
 
     // Att.
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> gainSliderAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> feedbackGainSliderAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> offsetSliderAtt;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> toleranceSliderAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> detuneSliderAtt;
 
     FeedbackAudioProcessor& audioProcessor;
 

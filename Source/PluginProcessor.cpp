@@ -105,8 +105,9 @@ void FeedbackAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
         waveTable.insert(i, sin(2.0 * juce::double_Pi * i / wtSize));
     }
 
-    // feedback gain interpolation for avoiding pops and clicks
+    // feedback gain & frequency interpolation for avoiding pops and clicks and smoothness
     feedbackRamp.reset(curSampleRate, 0.005);
+    frequencyRamp.reset(curSampleRate, 0.025);
 }
 
 void FeedbackAudioProcessor::releaseResources()
@@ -151,18 +152,20 @@ void FeedbackAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         // get data for mono and feedbackGain (with interpolation)
         auto* channelData = buffer.getWritePointer(0);
         feedbackGain = apvts.getRawParameterValue("FEEDBACK")->load();
+        auto offsetValue = apvts.getRawParameterValue("OFFSET")->load();
+        auto detuneValue = apvts.getRawParameterValue("DETUNE")->load();
+
         feedbackRamp.setTargetValue(feedbackGain);
 
         for (int sample = 0; sample < buffer.getNumSamples(); sample++)
         {
             pushNextSampleIntoFifo(channelData[sample]);
             
-            if (playFeedback)
-            {
-                increment = frequency * wtSize / curSampleRate;
-                channelData[sample] += waveTable[(int)phase] * feedbackRamp.getNextValue();
-                phase = fmod((phase + increment), wtSize);
-            }
+            previousFrequency = frequency;
+            auto tempFrequency = frequencyRamp.getNextValue() * std::pow(semitoneConstant, offsetValue) + detuneValue;
+            increment = tempFrequency * wtSize / curSampleRate;
+            channelData[sample] += waveTable[(int)phase] * (feedbackRamp.getNextValue() / 2);
+            phase = fmod((phase + increment), wtSize);
         }
     }
 
@@ -177,20 +180,17 @@ void FeedbackAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     }
 }
 
-// Helper function for pushSample... class fundamental frequency decides whether to play 
-void FeedbackAudioProcessor::setFeedbackFlag()
+// Helper function for pushSample: finds fundamental and decides if infinite sustain
+void FeedbackAudioProcessor::isSustain()
 {
     frequency = getFundamentalFrequency();
     if (frequency < lowestGuitarFreq || frequency > highestGuitarFreq)
     {
-        playFeedback = false;
-        phase = 0;
+        frequency = previousFrequency;
     }
     else {
-        // get offset slider value and use the semitone constant to calculate offset; playFlag -> true
-        auto offsetValue = apvts.getRawParameterValue("OFFSET")->load();
-        frequency *= std::pow(semitoneConstant, offsetValue);
-        playFeedback = true;
+        // if not changes set the target 
+        frequencyRamp.setTargetValue(frequency);
     }
 }
 
@@ -206,7 +206,7 @@ void FeedbackAudioProcessor::pushNextSampleIntoFifo(float sample) noexcept
         fifoIndex = 0;
         window.multiplyWithWindowingTable(fftData.data(), fftSize);
         forwardFFT.performFrequencyOnlyForwardTransform(fftData.data());
-        setFeedbackFlag();
+        isSustain();
     }
     fifo[(size_t)fifoIndex++] = sample; 
 }
@@ -228,7 +228,7 @@ float FeedbackAudioProcessor::getFundamentalFrequency()
             index = i;
         }
     }
-    if (max > (toleranceValue * 100))
+    if (max > (toleranceValue * toleranceConstant))
     {
         return (float)index / (fftSize - 1) * curSampleRate;
     }
@@ -271,11 +271,14 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 juce::AudioProcessorValueTreeState::ParameterLayout FeedbackAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
+    juce::NormalisableRange<float> rangeFeedback = juce::NormalisableRange<float>(0.0f, 1.0f, 0.0001f, 1.0, false);
 
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("GAIN", "Gain", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("FEEDBACK", "Feedback", 0.0f, 1.0f, 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("GAIN", "Gain", 0.0f, 1.0f, 1.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("FEEDBACK", "Feedback", rangeFeedback, 0.0f, juce::String(), 
+                                                                    juce::AudioProcessorParameter::genericParameter, nullptr, nullptr));
     params.push_back(std::make_unique<juce::AudioParameterInt>("OFFSET", "Offset", 0, 24, 12));
     params.push_back(std::make_unique<juce::AudioParameterFloat>("TOLERANCE", "Tolerance", 0.0f, 1.0f, 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("DETUNE", "Detune", -50.0f, 50.0f, 0.0f));
 
     return { params.begin(), params.end() };
 }
