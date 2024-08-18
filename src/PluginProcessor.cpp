@@ -99,7 +99,7 @@ void FeedbackAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     // set initial values for waveTable
     curSampleRate = sampleRate;
     phase = 0;
-    wtSize = fftSize; // maybe it'd be better to just initialize this in your member list?
+    wtSize = fftSize; 
     waveTable.initialise([&] (float i) { return sin(juce::MathConstants<double>::twoPi * i / wtSize); }, wtSize);
 
     // feedback gain & frequency interpolation for avoiding pops and clicks and smoothness
@@ -153,14 +153,12 @@ void FeedbackAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             pushNextSampleIntoFifo(channelData[sample]);
             
             const auto tempFrequency = frequencyRamp.getNextValue() * std::pow(semitoneConstant, offsetValue) + detuneValue;
-            // Looks like changing this to a local variable doesn't have an impact on memory or CPU usage, so it might be neater to keep it local
             const auto increment = tempFrequency * wtSize / curSampleRate;
             channelData[sample] += waveTable.get(phase) * (feedbackRamp.getNextValue() / 2.0f);
             phase = fmod((phase + increment), wtSize);
         }
     }
 
-    // Technically this would be more concise with a juce::dsp::Gain object but it works the exact same, it's your decision whether you wanna show that you know how to apply gain ramping or show more concise code
     // Gain ramp for main "gain out"
     gain = apvts.getRawParameterValue(ParamIDs::Gain)->load();
     if (gain == previousGain) {
@@ -172,9 +170,8 @@ void FeedbackAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     }
 }
 
-// IDK if this is the best name for this function, I think something like setNewFrequency would be more descriptive, there's probably something even better though. I feel like usually methods that start with 'is' return a bool.
 // Helper function for pushSample: finds fundamental and decides if infinite sustain
-void FeedbackAudioProcessor::isSustain()
+void FeedbackAudioProcessor::updateFreq()
 {
     const auto tempFrequency = getFundamentalFrequency();
     if (tempFrequency > lowestGuitarFreq && tempFrequency < highestGuitarFreq)
@@ -195,7 +192,7 @@ void FeedbackAudioProcessor::pushNextSampleIntoFifo(float sample) noexcept
         fifoIndex = 0;
         window.multiplyWithWindowingTable(fftData.data(), fftSize);
         forwardFFT.performFrequencyOnlyForwardTransform(fftData.data());
-        isSustain();
+        updateFreq();
     }
     fifo[fifoIndex++] = sample;
 }
@@ -269,10 +266,8 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 // Initializes the audioParameters and creates a vector of them for the APVTS  
 juce::AudioProcessorValueTreeState::ParameterLayout FeedbackAudioProcessor::createParameters()
 {
-    // Just looks cleaner to use a parameter layout object explicitly
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    // I wrapped the first argument in a ParameterID because it lets you add a version hint, which you might need in order built for AU
     layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID { ParamIDs::Gain, 1 },
                                                            ParamIDs::Gain,
                                                            0.0f, 1.0f, 1.0f));

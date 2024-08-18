@@ -31,7 +31,6 @@ FeedbackAudioProcessorEditor::FeedbackAudioProcessorEditor (FeedbackAudioProcess
     mFeedbackGainSlider.setSliderStyle(juce::Slider::SliderStyle::LinearVertical);
     mFeedbackGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, true, 50, 25);
     addAndMakeVisible(mFeedbackGainSlider);
-    //mFeedbackGainSlider.setSkewFactor(0.02, false);
     feedbackGainSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, ParamIDs::Feedback, mFeedbackGainSlider);
 
     // Feedback Gain Label
@@ -95,7 +94,7 @@ void FeedbackAudioProcessorEditor::paint (juce::Graphics& g)
 
 void FeedbackAudioProcessorEditor::resized()
 {
-    // I just like doing setBounds this way, a bit neater
+    // bounds for components
     juce::Rectangle<int> sliderBounds (50, getHeight() / 2 - 75, 100, 150);
     
     mOffsetSlider      .setBounds(sliderBounds);
