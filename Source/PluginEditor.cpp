@@ -11,7 +11,7 @@
 
 //==============================================================================
 FeedbackAudioProcessorEditor::FeedbackAudioProcessorEditor (FeedbackAudioProcessor& p)
-    : AudioProcessorEditor (&p), audioProcessor (p)
+    : AudioProcessorEditor (&p), audioProcessor (p), apvts (audioProcessor.apvts)
 {
     setSize(600, 300);
 
@@ -19,7 +19,7 @@ FeedbackAudioProcessorEditor::FeedbackAudioProcessorEditor (FeedbackAudioProcess
     mGainSlider.setSliderStyle(juce::Slider::SliderStyle::LinearVertical);
     mGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, true, 50, 25);
     addAndMakeVisible(mGainSlider);
-    gainSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, "GAIN", mGainSlider);
+    gainSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, ParamIDs::Gain, mGainSlider);
 
     // Gain Label 
     addAndMakeVisible(mGainLabel);
@@ -32,7 +32,7 @@ FeedbackAudioProcessorEditor::FeedbackAudioProcessorEditor (FeedbackAudioProcess
     mFeedbackGainSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, true, 50, 25);
     addAndMakeVisible(mFeedbackGainSlider);
     //mFeedbackGainSlider.setSkewFactor(0.02, false);
-    feedbackGainSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, "FEEDBACK", mFeedbackGainSlider);
+    feedbackGainSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, ParamIDs::Feedback, mFeedbackGainSlider);
 
     // Feedback Gain Label
     addAndMakeVisible(mFeedbackGainLabel);
@@ -41,11 +41,10 @@ FeedbackAudioProcessorEditor::FeedbackAudioProcessorEditor (FeedbackAudioProcess
     mFeedbackGainLabel.setJustificationType(juce::Justification::centred);
 
     // Offset Slider 
-    mOffsetSlider.setSliderStyle(juce::Slider::SliderStyle::Rotary);
+    mOffsetSlider.setSliderStyle(juce::Slider::SliderStyle::RotaryVerticalDrag);
     mOffsetSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, true, 50, 25);
-    mOffsetSlider.setTextValueSuffix(" +");
     addAndMakeVisible(mOffsetSlider);
-    offsetSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, "OFFSET", mOffsetSlider);
+    offsetSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, ParamIDs::Offset, mOffsetSlider);
 
     // Offset Label 
     addAndMakeVisible(mOffsetLabel);
@@ -57,7 +56,7 @@ FeedbackAudioProcessorEditor::FeedbackAudioProcessorEditor (FeedbackAudioProcess
     mToleranceSlider.setSliderStyle(juce::Slider::SliderStyle::LinearVertical);
     mToleranceSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, true, 50, 25);
     addAndMakeVisible(mToleranceSlider);
-    toleranceSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, "TOLERANCE", mToleranceSlider);
+    toleranceSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, ParamIDs::Tolerance, mToleranceSlider);
 
     // Tolerance Label
     addAndMakeVisible(mToleranceLabel);
@@ -69,7 +68,7 @@ FeedbackAudioProcessorEditor::FeedbackAudioProcessorEditor (FeedbackAudioProcess
     mDetuneSlider.setSliderStyle(juce::Slider::SliderStyle::LinearVertical);
     mDetuneSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, true, 50, 25);
     addAndMakeVisible(mDetuneSlider);
-    detuneSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, "DETUNE", mDetuneSlider);
+    detuneSliderAtt = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, ParamIDs::Detune, mDetuneSlider);
 
     // Detune Label
     addAndMakeVisible(mDetuneLabel);
@@ -92,14 +91,16 @@ FeedbackAudioProcessorEditor::~FeedbackAudioProcessorEditor()
 void FeedbackAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll(juce::Colours::black);
-    juce::Component::paint(g);
 }
 
 void FeedbackAudioProcessorEditor::resized()
 {
-    mGainSlider.setBounds(450, getHeight() / 2 - 75, 100, 150);
-    mFeedbackGainSlider.setBounds(350, getHeight() / 2 - 75, 100, 150);
-    mOffsetSlider.setBounds(50, getHeight() / 2 - 75, 100, 150);
-    mDetuneSlider.setBounds(150, getHeight() / 2 - 75, 100, 150);
-    mToleranceSlider.setBounds(250, getHeight() / 2 - 75, 100, 150);
+    // I just like doing setBounds this way, a bit neater
+    juce::Rectangle<int> sliderBounds (50, getHeight() / 2 - 75, 100, 150);
+    
+    mOffsetSlider      .setBounds(sliderBounds);
+    mDetuneSlider      .setBounds(sliderBounds.translated(100, 0));
+    mToleranceSlider   .setBounds(sliderBounds.translated(200, 0));
+    mFeedbackGainSlider.setBounds(sliderBounds.translated(300, 0));
+    mGainSlider        .setBounds(sliderBounds.translated(400, 0));
 }

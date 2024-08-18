@@ -99,11 +99,8 @@ void FeedbackAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     // set initial values for waveTable
     curSampleRate = sampleRate;
     phase = 0;
-    wtSize = fftSize;
-    for (int i = 0; i < wtSize; i++)
-    {
-        waveTable.insert(i, sin(2.0 * juce::double_Pi * i / wtSize));
-    }
+    wtSize = fftSize; // maybe it'd be better to just initialize this in your member list?
+    waveTable.initialise([&] (float i) { return sin(juce::MathConstants<double>::twoPi * i / wtSize); }, wtSize);
 
     // feedback gain & frequency interpolation for avoiding pops and clicks and smoothness
     feedbackRamp.reset(curSampleRate, 0.005);
@@ -142,35 +139,30 @@ void FeedbackAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
 {
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels  = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
-
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, buffer.getNumSamples());
 
     if (totalNumInputChannels > 0)
     {
         // get data for mono and feedbackGain (with interpolation)
         auto* channelData = buffer.getWritePointer(0);
-        feedbackGain = apvts.getRawParameterValue("FEEDBACK")->load();
-        auto offsetValue = apvts.getRawParameterValue("OFFSET")->load();
-        auto detuneValue = apvts.getRawParameterValue("DETUNE")->load();
-
-        feedbackRamp.setTargetValue(feedbackGain);
+        feedbackRamp.setTargetValue(apvts.getRawParameterValue(ParamIDs::Feedback)->load());
+        const auto offsetValue = apvts.getRawParameterValue(ParamIDs::Offset)->load();
+        const auto detuneValue = apvts.getRawParameterValue(ParamIDs::Detune)->load();
 
         for (int sample = 0; sample < buffer.getNumSamples(); sample++)
         {
             pushNextSampleIntoFifo(channelData[sample]);
             
-            previousFrequency = frequency;
-            auto tempFrequency = frequencyRamp.getNextValue() * std::pow(semitoneConstant, offsetValue) + detuneValue;
-            increment = tempFrequency * wtSize / curSampleRate;
-            channelData[sample] += waveTable[(int)phase] * (feedbackRamp.getNextValue() / 2);
+            const auto tempFrequency = frequencyRamp.getNextValue() * std::pow(semitoneConstant, offsetValue) + detuneValue;
+            // Looks like changing this to a local variable doesn't have an impact on memory or CPU usage, so it might be neater to keep it local
+            const auto increment = tempFrequency * wtSize / curSampleRate;
+            channelData[sample] += waveTable.get(phase) * (feedbackRamp.getNextValue() / 2.0f);
             phase = fmod((phase + increment), wtSize);
         }
     }
 
+    // Technically this would be more concise with a juce::dsp::Gain object but it works the exact same, it's your decision whether you wanna show that you know how to apply gain ramping or show more concise code
     // Gain ramp for main "gain out"
-    gain = apvts.getRawParameterValue("GAIN")->load();
+    gain = apvts.getRawParameterValue(ParamIDs::Gain)->load();
     if (gain == previousGain) {
         buffer.applyGain(gain);
     }
@@ -180,17 +172,14 @@ void FeedbackAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     }
 }
 
+// IDK if this is the best name for this function, I think something like setNewFrequency would be more descriptive, there's probably something even better though. I feel like usually methods that start with 'is' return a bool.
 // Helper function for pushSample: finds fundamental and decides if infinite sustain
 void FeedbackAudioProcessor::isSustain()
 {
-    frequency = getFundamentalFrequency();
-    if (frequency < lowestGuitarFreq || frequency > highestGuitarFreq)
+    const auto tempFrequency = getFundamentalFrequency();
+    if (tempFrequency > lowestGuitarFreq && tempFrequency < highestGuitarFreq)
     {
-        frequency = previousFrequency;
-    }
-    else {
-        // if not changes set the target 
-        frequencyRamp.setTargetValue(frequency);
+        frequencyRamp.setTargetValue(tempFrequency);
     }
 }
 
@@ -208,14 +197,14 @@ void FeedbackAudioProcessor::pushNextSampleIntoFifo(float sample) noexcept
         forwardFFT.performFrequencyOnlyForwardTransform(fftData.data());
         isSustain();
     }
-    fifo[(size_t)fifoIndex++] = sample; 
+    fifo[fifoIndex++] = sample;
 }
 
 float FeedbackAudioProcessor::getFundamentalFrequency()
 {
     // tolerance determines how easy it is to generate feedback
-    auto toleranceValue = apvts.getRawParameterValue("TOLERANCE")->load();
-    float max = 0.f;
+    auto toleranceValue = apvts.getRawParameterValue(ParamIDs::Tolerance)->load();
+    float max = 0.0f;
     int index = 0;
     float absVal;
 
@@ -230,7 +219,7 @@ float FeedbackAudioProcessor::getFundamentalFrequency()
     }
     if (max > (toleranceValue * toleranceConstant))
     {
-        return (float)index / (fftSize - 1) * curSampleRate;
+        return static_cast<float> (index) / (fftSize - 1) * curSampleRate;
     }
     return 0;
 }
@@ -252,12 +241,22 @@ void FeedbackAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     // You should use this method to store your parameters in the memory block.
     // You could do that either as raw data, or use the XML or ValueTree classes
     // as intermediaries to make it easy to save and load complex data.
+    
+    auto state = apvts.copyState();
+    std::unique_ptr<juce::XmlElement> xmlAPVTS (state.createXml());
+    copyXmlToBinary(*xmlAPVTS, destData);
 }
 
 void FeedbackAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
+    
+    std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary(data, sizeInBytes));
+    
+    if (xmlState.get() != nullptr)
+        if (xmlState->hasTagName(apvts.state.getType()))
+            apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
 }
 
 //==============================================================================
@@ -270,15 +269,33 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 // Initializes the audioParameters and creates a vector of them for the APVTS  
 juce::AudioProcessorValueTreeState::ParameterLayout FeedbackAudioProcessor::createParameters()
 {
-    std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
-    juce::NormalisableRange<float> rangeFeedback = juce::NormalisableRange<float>(0.0f, 1.0f, 0.0001f, 1.0, false);
+    // Just looks cleaner to use a parameter layout object explicitly
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("GAIN", "Gain", 0.0f, 1.0f, 1.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("FEEDBACK", "Feedback", rangeFeedback, 0.0f, juce::String(), 
-                                                                    juce::AudioProcessorParameter::genericParameter, nullptr, nullptr));
-    params.push_back(std::make_unique<juce::AudioParameterInt>("OFFSET", "Offset", 0, 24, 12));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("TOLERANCE", "Tolerance", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("DETUNE", "Detune", -50.0f, 50.0f, 0.0f));
+    // I wrapped the first argument in a ParameterID because it lets you add a version hint, which you might need in order built for AU
+    layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID { ParamIDs::Gain, 1 },
+                                                           ParamIDs::Gain,
+                                                           0.0f, 1.0f, 1.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID { ParamIDs::Feedback, 1 },
+                                                           ParamIDs::Feedback,
+                                                           juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
+                                                           0.0f,
+                                                           juce::String(),
+                                                           juce::AudioProcessorParameter::genericParameter,
+                                                           nullptr,
+                                                           nullptr));
+    layout.add(std::make_unique<juce::AudioParameterInt>(juce::ParameterID { ParamIDs::Offset, 1 },
+                                                         ParamIDs::Offset,
+                                                         0, 24, 12,
+                                                         juce::String(),
+                                                         [] (int value, int /* maximumStringLength */) { return "+" + juce::String { value }; }, // this lets you add a prefix to the parameter value string
+                                                         nullptr));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID { ParamIDs::Tolerance, 1 },
+                                                           ParamIDs::Tolerance,
+                                                           0.0f, 1.0f, 0.5f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID { ParamIDs::Detune, 1 },
+                                                           ParamIDs::Detune,
+                                                           -50.0f, 50.0f, 0.0f));
 
-    return { params.begin(), params.end() };
+    return layout;
 }

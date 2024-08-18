@@ -13,6 +13,17 @@
 //==============================================================================
 /**
 */
+
+// In my opinion it's better to use a namespace for parameter IDs just so you don't risk misspelling. You could put this in a separate file if you think it'd be cleaner
+namespace ParamIDs
+{
+    inline constexpr auto Gain { "Gain" };
+    inline constexpr auto Feedback { "Feedback" };
+    inline constexpr auto Offset { "Offset" };
+    inline constexpr auto Tolerance { "Tolerance" };
+    inline constexpr auto Detune { "Detune" };
+};
+
 class FeedbackAudioProcessor  : public juce::AudioProcessor
 {
 public:
@@ -74,8 +85,8 @@ private:
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
     // ramp for feedback gain 
-    juce::LinearSmoothedValue<float> feedbackRamp{ 0.0f };
-    juce::LinearSmoothedValue<float> frequencyRamp{ 0.0f };
+    juce::LinearSmoothedValue<float> feedbackRamp { 0.0f };
+    juce::LinearSmoothedValue<float> frequencyRamp { 0.0f };
     //juce::LinearSmoothedValue<float> detuneRamp{ 0.0f };
 
     // PRIVATE MEMBER VARIABLES FOR FFT
@@ -86,17 +97,16 @@ private:
     int fifoIndex = 0;
 
     double curSampleRate;
-    float frequency;
-    float previousFrequency = 0;
+    // none of your code actually utilized the frequency and previousFrequency values in a meaningful way so I deleted them forever :)
 
     float gain;
     float previousGain;
 
-    juce::Array<float> waveTable;
+    // using a lookup table lets you do linear interpolation between values so you should get a slightly cleaner sine signal
+    juce::dsp::LookupTable<float> waveTable;
     double wtSize;
     double phase;
-    double increment;
-    float feedbackGain;
+//    float feedbackGain; IMO you don't need this
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FeedbackAudioProcessor)
 };
